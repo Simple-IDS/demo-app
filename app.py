@@ -1,6 +1,10 @@
 from flask import Flask, request, jsonify
 import os
 import logging
+import requests
+import time
+from logging.handlers import RotatingFileHandler
+from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
 
@@ -38,11 +42,14 @@ def index():
 def login():
     if request.method == "GET":
         log_access(200)
-        return """<form method="post">
+        # Inject the client-side detector script from local ids-proxy (port 8001)
+        detector_snippet = '<script src="http://127.0.0.1:8001/static/detector.js" data-token="tkn_demo"></script>'
+        return ("""<form method="post">
                     <input name="username" placeholder="username"/>
                     <input name="password" type="password" placeholder="password"/>
                     <button>Login</button>
-                  </form>"""
+                  </form>""" + detector_snippet)
+
     # POST = check login
     username = request.form.get("username")
     password = request.form.get("password")
@@ -50,7 +57,27 @@ def login():
         log_access(200)
         return jsonify({"ok": True, "msg": "welcome"})
     else:
+        # failed login: log and optionally forward a small event to ids-proxy so server-side detector can see it
         log_access(401)
+        try:
+            ids_proxy = os.environ.get('IDS_PROXY_URL', 'http://127.0.0.1:8001')
+            evt = {
+                'event_id': f"evt-{int(time.time()*1000)}",
+                'timestamp': datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
+                'token_id': os.environ.get('DEMO_TOKEN', 'tkn_demo'),
+                'type': 'auth',
+                'action': 'login_failed',
+                'payload': {
+                    'ip': request.remote_addr,
+                    'status': 401,
+                    'path': request.path,
+                    'username': username,
+                }
+            }
+            # best-effort, don't block demo app if ids-proxy is down
+            requests.post(ids_proxy.rstrip('/') + '/api/events', json=evt, timeout=0.5)
+        except Exception:
+            pass
         return jsonify({"ok": False, "msg": "invalid"}), 401
 
 @app.route("/search")

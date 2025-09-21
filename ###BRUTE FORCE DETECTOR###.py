@@ -4,13 +4,14 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 import time
 
-log_file = 'auth.log'
+log_file = 'access.log'
 time_window = timedelta(minutes=5)  
 threshold = 30      
 failed_attempts = defaultdict(list)
 
 def parse_log_line(line):
-    match = re.search(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) - FAILURE - IP: ([\d\.]+) .*', line)
+    match = re.search(r'(\d+\.\d+\.\d+\.\d+)\s+- - \[(.*?)\]\s+"(GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH)\s+(.*?)"\s+(\d+)',
+        line)
     if match:
         timestamp_str, ip_address = match.groups()
         timestamp = datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M:%S')
